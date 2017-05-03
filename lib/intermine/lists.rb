@@ -93,6 +93,11 @@ module InterMine::Lists
             details.each {|k,v| instance_variable_set('@' + k, v)}
             @unmatched_identifiers = []
             @tags ||= []
+            @uri = URI.parse(@manager.service.root)
+            @http = Net::HTTP.new(@uri.host, @uri.port)
+            if @uri.scheme == 'https'
+                @http.use_ssl = true
+            end
         end
 
         # True if the list has no elements.
@@ -219,7 +224,9 @@ module InterMine::Lists
             return if (@name == new_name)
             uri = URI.parse(@manager.service.root + Service::LIST_RENAME_PATH)
             params = @manager.service.params.merge("oldname" => @name, "newname" => new_name)
-            res = Net::HTTP.post_form(uri, params)
+            res = @http.start() do |http|
+                Net::HTTP.post_form(uri, params)
+            end
             @manager.process_list_creation_response(res)
             @name = new_name
         end
@@ -334,7 +341,9 @@ module InterMine::Lists
             s = @manager.service
             params = s.params.merge(ENRICHMENT_DEFAULTS).merge(opts).merge(:widget => widget, :list => @name)
             uri = URI.parse(s.root + Service::LIST_ENRICHMENT_PATH)
-            res = Net::HTTP.post_form(uri, params)
+            res = @http.start() do |http|
+                Net::HTTP.post_form(uri, params)
+            end
             return case res
             when Net::HTTPSuccess
                 JSON.parse(res.body)["results"].map {|row| SymbolAcceptingHash[row] }
@@ -392,7 +401,9 @@ module InterMine::Lists
             q = (list.is_a?(List)) ? list.list_query : list
             params = q.params.merge(@manager.service.params).merge("listName" => @name)
             uri = URI.parse(q.list_append_uri)
-            res = Net::HTTP.post_form(uri, params)
+            res = @http.start() do |http|
+                Net::HTTP.post_form(uri, params)
+            end
             handle_response(res)
         end
 
@@ -420,7 +431,7 @@ module InterMine::Lists
             req.content_type = "text/plain"
             req.content_length = f.size
 
-            res = Net::HTTP.start(uri.host, uri.port) do |http|
+            res = @http.start() do |http|
                 http.request(req)
             end
             handle_response(res)
@@ -482,6 +493,11 @@ module InterMine::Lists
             @service = service
             @lists = {}
             @temporary_lists = []
+            @uri = URI.parse(@service.root)
+            @http = Net::HTTP.new(@uri.host, @uri.port)
+            if @uri.scheme == 'https'
+                @http.use_ssl = true
+            end
             do_at_exit(self)
         end
 
@@ -585,7 +601,7 @@ module InterMine::Lists
                 uri = URI.parse(@service.root + Service::LISTS_PATH)
                 params = {"name" => name}
                 req = Net::HTTP::Delete.new(uri.path + "?" + params_to_query_string(params))
-                res = Net::HTTP.start(uri.host, uri.port) do |http|
+                res = @http.start do |http|
                     http.request(req)
                 end
                 check_response_for_error(res)
@@ -630,7 +646,9 @@ module InterMine::Lists
             uri = URI.parse(@service.root + Service::LIST_SUBTRACTION_PATH)
             params = @service.params.merge("name" => name, "description" => description, "references" => ref_names.join(';'),
                                            "subtract" => del_names.join(';'), "tags" => tags.join(';'))
-            res = Net::HTTP.post_form(uri, params)
+            res = @http.start() do |http|
+                Net::HTTP.post_form(uri, params)
+            end
             return process_list_creation_response(res)
         end
 
@@ -654,7 +672,9 @@ module InterMine::Lists
         def add_tags(list, *tags)
             uri = URI.parse(@service.root + Service::LIST_TAG_PATH)
             params = @service.params.merge("name" => list.name, "tags" => tags.join(";"))
-            res = Net::HTTP.post_form(uri, params)
+            res = @http.start() do |http|
+                Net::HTTP.post_form(uri, params)
+            end
             check_response_for_error(res)
             return JSON.parse(res.body)["tags"]
         end
@@ -671,7 +691,7 @@ module InterMine::Lists
             )
             req_path = uri.path + "?" + params_to_query_string(params)
             req = Net::HTTP::Delete.new(req_path)
-            res = Net::HTTP.start(uri.host, uri.port) do |http|
+            res = @http.start() do |http|
                 http.request(req)
             end
             check_response_for_error(res)
@@ -685,9 +705,9 @@ module InterMine::Lists
                 "name" => list.name
             )
             req_path = uri.path + "?" + params_to_query_string(params)
-            res = Net::HTTP.start(uri.host, uri.port) {|http|
-                  http.get(req_path)
-            }
+            res = @http.start() do |http|
+                http.get(req_path)
+            end
             check_response_for_error(res)
             return JSON.parse(res.body)["tags"]
         end
@@ -747,7 +767,9 @@ module InterMine::Lists
                 "name" => name, "lists" => list_names.join(";"), 
                 "description" => description, "tags" => tags.join(';')
             )
-            res = Net::HTTP::post_form(uri, params)
+            res = @http.start() do |http|
+                Net::HTTP::post_form(uri, params)
+            end
             return process_list_creation_response(res)
         end
 
@@ -776,7 +798,9 @@ module InterMine::Lists
             }
             service_params = @service.params
             params = query.params.merge(list_params).merge(service_params)
-            return Net::HTTP.post_form(URI.parse(uri), params)
+            @http.start() do |http|
+                return Net::HTTP.post_form(URI.parse(uri), params)
+            end
         end
 
         # Routine for creating a List in a webservice from a list of Ids.
@@ -805,7 +829,7 @@ module InterMine::Lists
             req.content_type = "text/plain"
             req.content_length = f.size
 
-            res = Net::HTTP.start(uri.host, uri.port) do |http|
+            res = @http.start() do |http|
                 http.request(req)
             end
             f.close

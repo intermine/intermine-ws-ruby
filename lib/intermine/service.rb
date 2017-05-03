@@ -165,6 +165,9 @@ module InterMine
             @root_path = root_uri.path
 
             @http = Net::HTTP.new(root_uri.host, root_uri.port)
+            if root_uri.scheme == 'https'
+                @http.use_ssl = true
+            end
 
             v_path = @root + VERSION_PATH
             begin
