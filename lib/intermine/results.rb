@@ -233,12 +233,18 @@ module InterMine::Results
             @query = query
             @start = start
             @size = size
+            @http = Net::HTTP.new(@uri.host, @uri.port)
+            if @uri.scheme == 'https'
+                @http.use_ssl = true
+            end
         end
 
         # Run a request to get the size of the result set.
         def get_size
             query = params("jsoncount")
-            res = Net::HTTP.post_form(@uri, query)
+            res = @http.start() do |http|
+                Net::HTTP.post_form(@uri, query)
+            end
             case res
             when Net::HTTPSuccess
                 return check_result_set(res.body)["count"]
@@ -331,7 +337,7 @@ module InterMine::Results
         def each_line(data)
             req = Net::HTTP::Post.new(@uri.path)
             req.set_form_data(data)
-            Net::HTTP.new(@uri.host, @uri.port).start {|http|
+            @http.start {|http|
                 http.request(req) {|resp|
                     holdover = ""
                     resp.read_body {|chunk|
